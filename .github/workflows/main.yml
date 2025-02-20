@@ -1,0 +1,45 @@
+name: Upload to Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      DOWNLOAD_URL:
+        description: "Download URL"
+        required: true
+        default: "https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jquery-speedtest/100MB.txt"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare environment
+        run: |
+          sudo mkdir -p /mnt/workspace
+          sudo chown $USER:$USER /mnt/workspace
+
+      - name: Download file
+        working-directory: /mnt/workspace
+        run: |
+          wget --content-disposition --no-check-certificate "${{ github.event.inputs.DOWNLOAD_URL }}"
+          FILE_NAME=$(ls)
+          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_ENV
+
+      - name: Check file size
+        working-directory: /mnt/workspace
+        run: |
+          FILE_SIZE=$(stat -c%s "${{ env.FILE_NAME }}")
+          echo "FILE_SIZE=$FILE_SIZE" >> $GITHUB_ENV
+
+      - name: Split large file
+        if: ${{ env.FILE_SIZE >= 2147483648 }}
+        working-directory: /mnt/workspace
+        run: |
+          split -b 1G "${{ env.FILE_NAME }}" "${{ env.FILE_NAME }}_part_"
+          rm "${{ env.FILE_NAME }}"
+
+      - name: GH Release
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          files: /mnt/workspace/*
+          name: ${{ env.FILE_NAME }}
+          tag_name: ${{ env.FILE_NAME }}
